@@ -1,6 +1,9 @@
+#!/bin/bash
+
+## ambiente de produção - juliano liberato
+
 set -ueo pipefail
-apt update
-apt install libpcap0.8 libpcap0.8-dev libpcap-dev passwd -y
+apt install passwd -y
 echo $PATH
 export PATH=$PATH:/usr/sbin:/sbin
 echo "Update System"
@@ -66,32 +69,94 @@ apt-get install --yes -qq --no-install-recommends --no-install-suggests \
   libpcap-dev \
 > /dev/null
 
-rm -rf asterisk*
-clear
-cd /usr/src/
-wget http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz
-tar xzvf asterisk-20-current.tar.gz
-rm -rf asterisk-20-current.tar.gz
-mv asterisk* asterisk
+apt-get purge --yes -qq --auto-remove > /dev/null
+rm -rf /var/lib/apt/lists/*
+mkdir -p /usr/src/asterisk
 cd /usr/src/asterisk
-useradd -c 'Asterisk PBX' -d /var/lib/asterisk asterisk
-mkdir /var/run/asterisk
-chown -R asterisk:asterisk /var/run/asterisk
-contrib/scripts/install_prereq install
-make clean
-./configure
-make menuselect.makeopts
-menuselect/menuselect --enable res_config_mysql  menuselect.makeopts
-menuselect/menuselect --enable format_mp3  menuselect.makeopts
-menuselect/menuselect --enable codec_opus  menuselect.makeopts
-menuselect/menuselect --enable codec_silk  menuselect.makeopts
-menuselect/menuselect --enable codec_siren7  menuselect.makeopts
-menuselect/menuselect --enable codec_siren14  menuselect.makeopts
-contrib/scripts/get_mp3_source.sh
-make
-make install
-make samples
-make config
+curl -sL http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz | tar --strip-components 1 -xz
+echo "Install source mp3"
+./contrib/scripts/get_mp3_source.sh && \
+contrib/scripts/install_prereq install && \
+./configure --prefix=/usr --libdir=/usr/lib --with-pjproject-bundled --with-jansson-bundled --with-resample --with-ssl=ssl --with-srtp > /dev/null
+: ${JOBS:=$(( $(nproc) + $(nproc) / 2 ))}
+
+make menuselect/menuselect menuselect-tree menuselect.makeopts && \
+  menuselect/menuselect \
+    --enable-category MENUSELECT_ADDONS \
+    --enable-category MENUSELECT_CHANNELS \
+    --enable-category MENUSELECT_APPS \
+    --enable-category MENUSELECT_CDR \
+    --enable-category MENUSELECT_FORMATS \
+    --enable-category MENUSELECT_FUNCS \
+    --enable-category MENUSELECT_PBX \
+    --enable-category MENUSELECT_RES \
+    --enable-category MENUSELECT_CEL \
+    --enable-category MENUSELECT_CORE_SOUNDS \
+    --enable-category MENUSELECT_EXTRA_SOUNDS \
+    --enable-category MENUSELECT_MOH \
+&& \
+menuselect/menuselect \
+    --enable BETTER_BACKTRACES \
+    --enable DONT_OPTIMIZE \
+    --enable app_confbridge \
+    --enable cdr_pgsql \
+    --enable cel_pgsql \
+    --enable res_config_pgsql \
+    --enable app_macro \
+    --enable app_page \
+    --enable binaural_rendering_in_bridge_softmix \
+    --enable chan_motif \
+    --enable codec_silk \
+    --enable codec_opus \
+    --enable format_mp3 \
+    --enable res_ari \
+    --enable res_chan_stats \
+    --enable res_calendar \
+    --enable res_calendar_caldav \
+    --enable res_calendar_icalendar \
+    --enable res_endpoint_stats \
+    --enable res_fax \
+    --enable res_fax_spandsp \
+    --enable res_pktccops \
+    --enable res_snmp \
+    --enable res_srtp \
+    --enable res_xmpp \
+    --disable BUILD_NATIVE \
+    --disable app_meetme \
+    --disable app_ivrdemo \
+    --disable app_saycounted \
+    --disable app_skel \
+    --disable cdr_sqlite3_custom \
+    --disable cel_sqlite3_custom \
+    --disable cdr_tds \
+    --disable cel_tds \
+    --disable cdr_radius \
+    --disable cel_radius \
+    --disable chan_alsa \
+    --disable chan_console \
+    --disable chan_mgcp \
+    --disable chan_skinny \
+    --disable chan_ooh323 \
+    --disable chan_mobile \
+    --disable chan_unistim \
+    --disable res_ari_mailboxes \
+    --disable res_digium_phone \
+    --disable res_calendar_ews \
+    --disable res_calendar_exchange \
+    --disable res_stasis_mailbox \
+    --disable res_mwi_external \
+    --disable res_mwi_external_ami \
+    --disable res_config_mysql \
+    --disable res_config_ldap \
+    --disable res_config_sqlite3 \
+    --disable res_phoneprov \
+    --disable res_pjsip_phoneprov_provider
+make -j ${JOBS} all > /dev/null || make -j ${JOBS} all
+make install > /dev/null
+make install-headers > /dev/null
+make config > /dev/null
+make samples > /dev/null
+echo "---------- END build ----------" 
 
   cd /usr/src && \
   mkdir bcg729 && \
@@ -116,7 +181,7 @@ make config
   ./bootstrap.sh && \
   ./configure --prefix=/usr && \
   make && \
-  make install && \
+  make install
 
 sed -i -E 's/^;(run)(user|group)/\1\2/' /etc/asterisk/asterisk.conf
 
@@ -129,6 +194,8 @@ cp codec_opus_config-en_US.xml /var/lib/asterisk/documentation/
 mkdir -p /etc/asterisk/ \
          /var/spool/asterisk/fax
 
+sudo groupadd asterisk
+sudo useradd -r -d /var/lib/asterisk -g asterisk asterisk
 sudo usermod -aG audio,dialout asterisk
 sudo chown -R asterisk.asterisk /etc/asterisk
 sudo chown -R asterisk.asterisk /var/{lib,log,spool}/asterisk
@@ -137,3 +204,20 @@ chmod -R 750 /var/spool/asterisk
 
 cd /
 rm -rf /usr/src/codecs
+
+DEVPKGS="$(dpkg -l | grep '\-dev' | awk '{print $2}' | xargs)"
+DEBIAN_FRONTEND=noninteractive apt-get --yes -qq purge \
+  autoconf \
+  build-essential \
+  bzip2 \
+  cpp \
+  m4 \
+  make \
+  patch \
+  perl \
+  perl-modules \
+  pkg-config \
+  xz-utils \
+  ${DEVPKGS} \
+> /dev/null
+rm -rf /var/lib/apt/lists/*
