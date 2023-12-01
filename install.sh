@@ -66,18 +66,17 @@ apt-get install --yes -qq --no-install-recommends --no-install-suggests \
   libpcap-dev \
 > /dev/null
 
-mkdir -p /usr/src/asterisk
-cd /usr/src/asterisk
+rm -rf asterisk*
 clear
-echo "Install source mp3"
-wget http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz /usr/src/
 cd /usr/src/
-tar xzvf asterisk-20-current.tar.gz /usr/src/asterisk
+wget http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz
+tar xzvf asterisk-20-current.tar.gz
 rm -rf asterisk-20-current.tar.gz
+mv asterisk* asterisk
+cd /usr/src/asterisk
 useradd -c 'Asterisk PBX' -d /var/lib/asterisk asterisk
 mkdir /var/run/asterisk
 chown -R asterisk:asterisk /var/run/asterisk
-chown -R asterisk:asterisk /var/log/asterisk
 contrib/scripts/install_prereq install
 make clean
 ./configure
@@ -94,14 +93,47 @@ make install
 make samples
 make config
 
+  cd /usr/src && \
+  mkdir bcg729 && \
+  curl -fSL --connect-timeout 30 https://github.com/BelledonneCommunications/bcg729/archive/1.1.1.tar.gz | tar xz --strip 1 -C bcg729 && \
+  cd bcg729 && \
+  cmake . -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_PREFIX_PATH=/usr && \
+  make && \
+  make install && \
+  cd /usr/src && \
+  mkdir asterisk-g72x && \
+  curl -fSL --connect-timeout 30 https://bitbucket.org/arkadi/asterisk-g72x/get/master.tar.gz | tar xz --strip 1 -C asterisk-g72x && \
+  cd asterisk-g72x && \
+  ./autogen.sh && \
+  ./configure --prefix=/usr --with-bcg729 --enable-penryn && \
+  make && \
+  make install && \
+  cd /usr/src && \
+  mkdir sngrep && \
+  curl -fSL --connect-timeout 30 https://github.com/irontec/sngrep/archive/v1.6.0.tar.gz | tar xz --strip 1 -C sngrep && \
+  cd sngrep && \
+  apt install libpcap0.8 libpcap0.8-dev libpcap-dev -y && \
+  ./bootstrap.sh && \
+  ./configure --prefix=/usr && \
+  make && \
+  make install && \
 
-pt-get purge --yes -qq --auto-remove > /dev/null
-rm -rf /var/lib/apt/lists/*
-mkdir -p /usr/src/asterisk
-cd /usr/src/asterisk
-curl -sL http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz | tar --strip-components 1 -xz
-echo "Install source mp3"
-./contrib/scripts/get_mp3_source.sh && \
-contrib/scripts/install_prereq install && \
-./configure --prefix=/usr --libdir=/usr/lib --with-pjproject-bundled --with-jansson-bundled --with-resample --with-ssl=ssl --with-srtp > /dev/null
-: ${JOBS:=$(( $(nproc) + $(nproc) / 2 ))}
+sed -i -E 's/^;(run)(user|group)/\1\2/' /etc/asterisk/asterisk.conf
+
+mkdir -p /usr/src/codecs/opus
+cd /usr/src/codecs/opus
+curl -sL http://downloads.digium.com/pub/telephony/codec_opus/asterisk-16.0/x86-64/codec_opus-16.0_current-x86_64.tar.gz | tar xz --strip 1 
+cp *.so /usr/lib/asterisk/modules/
+cp codec_opus_config-en_US.xml /var/lib/asterisk/documentation/
+
+mkdir -p /etc/asterisk/ \
+         /var/spool/asterisk/fax
+
+sudo usermod -aG audio,dialout asterisk
+sudo chown -R asterisk.asterisk /etc/asterisk
+sudo chown -R asterisk.asterisk /var/{lib,log,spool}/asterisk
+sudo chown -R asterisk.asterisk /usr/lib/asterisk
+chmod -R 750 /var/spool/asterisk
+
+cd /
+rm -rf /usr/src/codecs
