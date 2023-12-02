@@ -1,7 +1,3 @@
-#!/bin/bash
-
-## ambiente de produção - juliano liberato
-
 set -ueo pipefail
 
 echo "Update System"
