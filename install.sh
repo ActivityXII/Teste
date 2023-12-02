@@ -1,18 +1,6 @@
-#!/bin/bash
-
-## ambiente de produção - juliano liberato
-
-set -ueo pipefail
-apt install passwd -y
-echo $PATH
-export PATH=$PATH:/usr/sbin:/sbin
-echo "Update System"
-DEBIAN_FRONTEND=noninteractive \
-apt-get update -qq
-
 echo "Install packages"
 DEBIAN_FRONTEND=noninteractive \
-apt-get install --yes -qq --no-install-recommends --no-install-suggests \
+apt install -y \
   odbc-postgresql \
   aptitude \
   mpg123 \
@@ -68,18 +56,27 @@ apt-get install --yes -qq --no-install-recommends --no-install-suggests \
   libtool \
   libpcap-dev \
 > /dev/null
-
-apt-get purge --yes -qq --auto-remove > /dev/null
-rm -rf /var/lib/apt/lists/*
-mkdir -p /usr/src/asterisk
-cd /usr/src/asterisk
-curl -sL http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz | tar --strip-components 1 -xz
-echo "Install source mp3"
-./contrib/scripts/get_mp3_source.sh && \
-contrib/scripts/install_prereq install && \
-./configure --prefix=/usr --libdir=/usr/lib --with-pjproject-bundled --with-jansson-bundled --with-resample --with-ssl=ssl --with-srtp > /dev/null
-: ${JOBS:=$(( $(nproc) + $(nproc) / 2 ))}
-
+echo
+echo '----------- Install Asterisk 13 ----------'
+echo
+sleep 1
+cd /usr/src
+wget http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz
+clear
+tar xzvf asterisk-20-current.tar.gz
+rm -rf asterisk-20-current.tar.gz
+cd asterisk-*
+apt install passwd -y
+echo $PATH
+export PATH=$PATH:/usr/sbin:/sbin
+useradd -c 'Asterisk PBX' -d /var/lib/asterisk asterisk
+mkdir /var/run/asterisk
+mkdir /var/log/asterisk
+chown -R asterisk:asterisk /var/run/asterisk
+chown -R asterisk:asterisk /var/log/asterisk
+contrib/scripts/install_prereq install
+make clean
+./configure
 make menuselect/menuselect menuselect-tree menuselect.makeopts && \
   menuselect/menuselect \
     --enable-category MENUSELECT_ADDONS \
@@ -151,73 +148,55 @@ menuselect/menuselect \
     --disable res_config_sqlite3 \
     --disable res_phoneprov \
     --disable res_pjsip_phoneprov_provider
-make -j ${JOBS} all > /dev/null || make -j ${JOBS} all
-make install > /dev/null
-make install-headers > /dev/null
-make config > /dev/null
-make samples > /dev/null
-echo "---------- END build ----------" 
+contrib/scripts/get_mp3_source.sh
+make
+make install
+make samples
+make config
 
-  cd /usr/src && \
-  mkdir bcg729 && \
-  curl -fSL --connect-timeout 30 https://github.com/BelledonneCommunications/bcg729/archive/1.1.1.tar.gz | tar xz --strip 1 -C bcg729 && \
-  cd bcg729 && \
-  cmake . -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_PREFIX_PATH=/usr && \
-  make && \
-  make install && \
-  cd /usr/src && \
-  mkdir asterisk-g72x && \
-  curl -fSL --connect-timeout 30 https://bitbucket.org/arkadi/asterisk-g72x/get/master.tar.gz | tar xz --strip 1 -C asterisk-g72x && \
-  cd asterisk-g72x && \
-  ./autogen.sh && \
-  ./configure --prefix=/usr --with-bcg729 --enable-penryn && \
-  make && \
-  make install && \
-  cd /usr/src && \
-  mkdir sngrep && \
-  curl -fSL --connect-timeout 30 https://github.com/irontec/sngrep/archive/v1.6.0.tar.gz | tar xz --strip 1 -C sngrep && \
-  cd sngrep && \
-  apt install libpcap0.8 libpcap0.8-dev libpcap-dev -y && \
-  ./bootstrap.sh && \
-  ./configure --prefix=/usr && \
-  make && \
-  make install
-
-sed -i -E 's/^;(run)(user|group)/\1\2/' /etc/asterisk/asterisk.conf
-
-mkdir -p /usr/src/codecs/opus
-cd /usr/src/codecs/opus
-curl -sL http://downloads.digium.com/pub/telephony/codec_opus/asterisk-16.0/x86-64/codec_opus-16.0_current-x86_64.tar.gz | tar xz --strip 1 
-cp *.so /usr/lib/asterisk/modules/
-cp codec_opus_config-en_US.xml /var/lib/asterisk/documentation/
-
-mkdir -p /etc/asterisk/ \
-         /var/spool/asterisk/fax
-
-sudo groupadd asterisk
-sudo useradd -r -d /var/lib/asterisk -g asterisk asterisk
-sudo usermod -aG audio,dialout asterisk
-sudo chown -R asterisk.asterisk /etc/asterisk
-sudo chown -R asterisk.asterisk /var/{lib,log,spool}/asterisk
-sudo chown -R asterisk.asterisk /usr/lib/asterisk
-chmod -R 750 /var/spool/asterisk
-
-cd /
-rm -rf /usr/src/codecs
-
-DEVPKGS="$(dpkg -l | grep '\-dev' | awk '{print $2}' | xargs)"
-DEBIAN_FRONTEND=noninteractive apt-get --yes -qq purge \
-  autoconf \
-  build-essential \
-  bzip2 \
-  cpp \
-  m4 \
-  make \
-  patch \
-  perl \
-  perl-modules \
-  pkg-config \
-  xz-utils \
-  ${DEVPKGS} \
-> /dev/null
-rm -rf /var/lib/apt/lists/*
+apt install -y iptables-services
+rm -rf /etc/fail2ban
+cd /tmp
+git clone https://github.com/fail2ban/fail2ban.git
+cd /tmp/fail2ban
+python setup.py install
+systemctl mask firewalld.service
+systemctl enable iptables.service
+systemctl enable ip6tables.service
+systemctl stop firewalld.service
+systemctl start iptables.service
+systemctl start ip6tables.service
+systemctl enable iptables
+systemctl stop firewalld
+chkconfig --levels 123456 firewalld off
+echo
+echo "Installing Fail2ban & Iptables"
+echo
+ssh_port=$(cat /etc/ssh/sshd_config | grep Port |  awk 'NR==1{print $2}')
+iptables -F
+iptables -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
+iptables -A OUTPUT -p icmp --icmp-type echo-reply -j ACCEPT
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+iptables -A INPUT -p tcp --dport $ssh_port -j ACCEPT
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+iptables -A INPUT -p udp -m udp --dport 3306 -j ACCEPT
+iptables -A INPUT -p udp -m udp --dport 5060 -j ACCEPT
+iptables -A INPUT -p udp -m udp --dport 10000:50000 -j ACCEPT
+iptables -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
+iptables -I INPUT -j DROP -p udp --dport 5060 -m string --string "friendly-scanner" --algo bm
+iptables -I INPUT -j DROP -p udp --dport 5060 -m string --string "sundayddr" --algo bm
+iptables -I INPUT -j DROP -p udp --dport 5060 -m string --string "sipsak" --algo bm
+iptables -I INPUT -j DROP -p udp --dport 5060 -m string --string "sipvicious" --algo bm
+iptables -I INPUT -j DROP -p udp --dport 5060 -m string --string "iWar" --algo bm
+iptables -A INPUT -j DROP -p udp --dport 5060 -m string --string "sipcli/" --algo bm
+iptables -A INPUT -j DROP -p udp --dport 5060 -m string --string "VaxSIPUserAgent/" --algo bm
+sudo apt update
+sudo apt install ufw
+sudo ufw allow 3306
+sudo ufw enable
+sudo ufw status
