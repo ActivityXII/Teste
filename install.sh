@@ -1,3 +1,7 @@
+#!/bin/bash
+
+## ambiente de produção - juliano liberato
+
 set -ueo pipefail
 
 echo "Update System"
@@ -7,7 +11,9 @@ apt-get update -qq
 echo "Install packages"
 DEBIAN_FRONTEND=noninteractive \
 apt-get install --yes -qq --no-install-recommends --no-install-suggests \
+apt-get install --yes --no-install-recommends --no-install-suggests \
   odbc-postgresql \
+  aptitude \
   mpg123 \
   sox \
   make \
@@ -62,7 +68,7 @@ apt-get install --yes -qq --no-install-recommends --no-install-suggests \
   libpcap-dev \
 > /dev/null
 
-apt-get purge --yes -qq --auto-remove > /dev/null
+apt-get purge --yes --auto-remove > /dev/null
 rm -rf /var/lib/apt/lists/*
 mkdir -p /usr/src/asterisk
 cd /usr/src/asterisk
@@ -143,6 +149,7 @@ menuselect/menuselect \
     --disable res_config_sqlite3 \
     --disable res_phoneprov \
     --disable res_pjsip_phoneprov_provider
+make
 make install > /dev/null
 make install-headers > /dev/null
 make config > /dev/null
