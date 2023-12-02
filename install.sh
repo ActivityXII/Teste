@@ -1,4 +1,4 @@
-echo "Install packages"
+echo "Install packagess"
 DEBIAN_FRONTEND=noninteractive \
 apt-get install -y \
   odbc-postgresql \
