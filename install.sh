@@ -56,10 +56,15 @@ apt-get install -y \
   libtool \
   libpcap-dev \
 > /dev/null
+
 echo
+
 echo '----------- Install Asterisk 13 ----------'
+
 echo
+
 sleep 1
+
 cd /usr/src
 wget http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-20-current.tar.gz
 clear
