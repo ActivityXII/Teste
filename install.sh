@@ -1,7 +1,3 @@
-#!/bin/bash
-
-## ambiente de produção - juliano liberato
-
 set -ueo pipefail
 
 echo "Update System"
@@ -11,7 +7,6 @@ apt-get update -qq
 echo "Install packages"
 DEBIAN_FRONTEND=noninteractive \
 apt-get install --yes -qq --no-install-recommends --no-install-suggests \
-apt-get install --yes --no-install-recommends --no-install-suggests \
   odbc-postgresql \
   aptitude \
   mpg123 \
