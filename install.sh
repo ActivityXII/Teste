@@ -146,6 +146,7 @@ menuselect/menuselect \
     --disable res_pjsip_phoneprov_provider && \
 make
 ./configure --prefix=/usr --libdir=/usr/lib --with-pjproject-bundled --with-jansson-bundled --with-resample --with-ssl=ssl --with-srtp > /dev/null
+echo "---------- START build ----------" 
 make install > /dev/null
 make install-headers > /dev/null
 make config > /dev/null
