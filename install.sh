@@ -1,8 +1,8 @@
 echo "Install packages"
 DEBIAN_FRONTEND=noninteractive \
-apt install -y \
+apt-get install -y \
   odbc-postgresql \
-  aptitude \
+  apt-getitude \
   mpg123 \
   sox \
   make \
@@ -66,7 +66,7 @@ clear
 tar xzvf asterisk-20-current.tar.gz
 rm -rf asterisk-20-current.tar.gz
 cd asterisk-*
-apt install passwd -y
+apt-get install passwd -y
 echo $PATH
 export PATH=$PATH:/usr/sbin:/sbin
 useradd -c 'Asterisk PBX' -d /var/lib/asterisk asterisk
@@ -154,7 +154,7 @@ make install
 make samples
 make config
 
-apt install -y iptables-services
+apt-get install -y iptables-services
 rm -rf /etc/fail2ban
 cd /tmp
 git clone https://github.com/fail2ban/fail2ban.git
@@ -195,8 +195,8 @@ iptables -I INPUT -j DROP -p udp --dport 5060 -m string --string "sipvicious" --
 iptables -I INPUT -j DROP -p udp --dport 5060 -m string --string "iWar" --algo bm
 iptables -A INPUT -j DROP -p udp --dport 5060 -m string --string "sipcli/" --algo bm
 iptables -A INPUT -j DROP -p udp --dport 5060 -m string --string "VaxSIPUserAgent/" --algo bm
-sudo apt update
-sudo apt install ufw
+sudo apt-get update
+sudo apt-get install ufw
 sudo ufw allow 3306
 sudo ufw enable
 sudo ufw status
